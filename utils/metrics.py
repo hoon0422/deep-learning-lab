@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, Callable, List, Tuple
+from typing import Dict, Iterable, Callable, List, Tuple, Union, Any, Optional
 import math
 
 import torch
@@ -146,93 +146,25 @@ def rgb_to_lab_space(img):
     return output.to(device)
 
 
-def create_split_field_and_metric_funcs_dict(splits: Iterable[str], field_metric_funcs_dict: Dict[
-    str, Dict[str, Callable[[torch.Tensor, torch.Tensor], float]]]) \
-        -> Dict[str, Dict[str, Dict[str, Callable[[torch.Tensor, torch.Tensor], float]]]]:
-    return dict(
-        (split, dict(
-            (f'{split}_{field}', metric_funcs)
-            for field, metric_funcs in field_metric_funcs_dict.items()
-        )) for split in splits
-    )
-
-
-def create_split_and_criterion_lists_dict(splits: Iterable[str], criterion_names: Iterable[str]) -> Dict[
-    str, List[str]]:
-    return dict(
-        (split, [f'{split}_{criterion_name}' for criterion_name in criterion_names]) for split in splits
-    )
-
-
-def get_avg_metrics_and_losses(metric_containers, criterion_container):
-    avg_metrics_and_losses = {}
-    avg_losses = criterion_container.calc_averages()
-    for field, metric_container in metric_containers.items():
-        avg_metrics_and_losses[field] = metric_container.calc_averages()
-
-    for criterion_field, loss in avg_losses.items():
-        field = criterion_field[criterion_field.rfind('/') + 1:]
-        if field not in avg_metrics_and_losses:
-            avg_metrics_and_losses[field] = dict()
-        avg_metrics_and_losses[field][criterion_field] = loss
-
-    return avg_metrics_and_losses
-
-
 class MetricCalculator:
-    def __init__(self, metric_funcs, transform=None):
-        self.metric_funcs = dict()
-        self.transform = transform if transform is not None else (lambda x: x)
-        self.add_metric_funcs(metric_funcs)
-
-    def add_metric_func(self, metric_name, metric_func):
-        self.metric_funcs[metric_name] = metric_func
-
-    def add_metric_funcs(self, metric_funcs):
+    def __init__(
+            self,
+            metric_funcs: Union[Dict[str, Callable[[Any, Any], float]], Iterable[Callable[[Any, Any], float]]],
+            transform: Optional[Callable[[Any], Any]] = None
+    ):
         if not isinstance(metric_funcs, dict):
             metric_funcs = dict((func.__name__, func) for func in metric_funcs)
 
-        for name, func in metric_funcs.items():
-            self.add_metric_func(name, func)
+        self.metric_funcs = metric_funcs
+        self.transform = transform
 
     def calc_metrics(self, output, target):
-        output = self.transform(output)
-        target = self.transform(target)
+        if self.transform is not None:
+            output = self.transform(output)
+            target = self.transform(target)
         return dict((name, func(output, target)) for name, func in self.metric_funcs.items())
 
     def __str__(self):
         nl = '\n'
         return f'transform: {str(self.transform)}' \
                + f'\nfunctions: {nl.join([str(key) for key in self.metric_funcs])}\n'
-
-
-class MetricContainer:
-    def __init__(self, field_name=None):
-        self.container = dict()
-        self.field_name = field_name
-
-    def initialize(self):
-        self.container = dict()
-
-    def append_metric(self, metric_key, metric_value):
-        if metric_key in self.container:
-            self.container[metric_key].append(metric_value)
-        else:
-            self.container[metric_key] = [metric_value]
-
-    def append_metrics(self, metrics_dict):
-        for key, value in metrics_dict.items():
-            self.append_metric(key, value)
-
-    def calc_average(self, metric_key):
-        return sum(self.container[metric_key]) / float(len(self.container[metric_key]))
-
-    def calc_averages(self):
-        if self.field_name is None:
-            return dict((key, self.calc_average(key)) for key in self.container)
-        else:
-            return dict((f'{self.field_name}/{key}', self.calc_average(key)) for key in self.container)
-
-    def __str__(self):
-        return f'field name: {self.field_name}\n' + \
-               '\n'.join([str(key) + ": " + str(values) for key, values in self.container]) + '\n'
