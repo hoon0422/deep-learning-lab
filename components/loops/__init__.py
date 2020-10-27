@@ -22,6 +22,8 @@ class CLoop:
         self._element = None
         self._index = None
         self._parent = None
+        self._args_containers = dict()
+        self._kwargs_containers = dict()
 
     @property
     def element(self):
@@ -71,26 +73,23 @@ class CLoop:
         if not hasattr(callback, '__call__'):
             raise TypeError("'callback' must be callable")
 
-        # closure variables
-        args_passed = tuple()
-        kwargs_passed = dict()
+        self._args_containers[callback] = tuple()
+        self._kwargs_containers[callback] = dict()
 
-        def pass_args(*args, **kwargs):
-            nonlocal args_passed, kwargs_passed
-            args_passed = args
-            kwargs_passed = kwargs
+        def pass_args(cloop, *args, **kwargs):
+            cloop._args_containers[callback] = args
+            cloop._kwargs_containers[callback] = kwargs
 
-        def get_args():
-            nonlocal args_passed, kwargs_passed
-            args = args_passed
-            kwargs = kwargs_passed
-            args_passed = tuple()
-            kwargs_passed = dict()
+        def get_args(cloop):
+            args = cloop._args_containers[callback]
+            kwargs = cloop._kwargs_containers[callback]
+            cloop._args_containers[callback] = tuple()
+            cloop._kwargs_containers[callback] = dict()
             return args, kwargs
 
         self._callback[cb_type] = callback
-        self._pass_args[cb_type] = pass_args
-        self._get_args[cb_type] = get_args
+        self._pass_args[cb_type] = lambda *args, **kwargs: pass_args(self)
+        self._get_args[cb_type] = lambda *args, **kwargs: get_args(self)
 
         return self
 
