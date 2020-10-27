@@ -7,23 +7,6 @@ import torch.distributed
 from utils import parallel
 
 
-def are_lists_same(*lists):
-    """
-    Check if all given lists have the same elements.
-    :param lists: lists to check
-    :return: True if all the lists have the same elements, otherwise False.
-    """
-    if len(lists) == 0:
-        return True
-
-    # check the length of each list
-    if len({len(li) for li in lists}) > 1:
-        return False
-
-    # check if all the elements are the same.
-    return all(elements.count(elements[0]) == len(elements) for elements in zip(*lists))
-
-
 def send_to_device(batch_data):
     if isinstance(batch_data, dict):
         new_batch_data = {}
@@ -36,19 +19,6 @@ def send_to_device(batch_data):
     else:
         new_batch_data = batch_data
     return new_batch_data
-
-
-def transpose_batch_and_frame_dimension(batch_data):
-    # change batch dimension and frame dimension: (b, f, c, h, w) -> (f, b, c, h, w)
-    for key, data in batch_data.items():
-        if type(data) != list:
-            batch_data[key] = torch.transpose(data, 0, 1)
-
-    fields = list(batch_data.keys())
-    data_lists = [batch_data[field] for field in fields]
-    batch_data = [dict(zip(fields, sample)) for sample in zip(*data_lists)]
-
-    return batch_data
 
 
 def reduce_all_iterable(iterable):
